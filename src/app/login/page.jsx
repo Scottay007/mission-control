@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createBrowserSupabaseClient } from '@/lib/supabase';
 
 export default function LoginPage() {
@@ -14,6 +14,24 @@ export default function LoginPage() {
 
   const supabase = createBrowserSupabaseClient();
 
+  // Detect password reset callback from Supabase
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setMode('reset');
+        setError('');
+        setSuccess('');
+      }
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'reset') {
+      setMode('reset');
+    }
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   const handleEmailAuth = async (e) => {
     e.preventDefault();
     setError('');
@@ -21,9 +39,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      if (mode === 'forgot') {
+      if (mode === 'reset') {
+        const { error: updateError } = await supabase.auth.updateUser({
+          password,
+        });
+        if (updateError) throw updateError;
+        setSuccess('Password updated successfully! Redirecting...');
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1500);
+      } else if (mode === 'forgot') {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin + '/account',
+          redirectTo: window.location.origin + '/login?mode=reset',
         });
         if (resetError) throw resetError;
         setSuccess('Check your email for a password reset link!');
@@ -48,7 +75,9 @@ export default function LoginPage() {
           password,
         });
         if (signinError) throw signinError;
-        window.location.href = '/dashboard';
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get('redirect') || '/dashboard';
+        window.location.href = redirect;
       }
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
@@ -88,12 +117,14 @@ export default function LoginPage() {
             {mode === 'signup' && 'Create your account'}
             {mode === 'magic' && 'Magic link sign in'}
             {mode === 'forgot' && 'Reset your password'}
+            {mode === 'reset' && 'Set your new password'}
           </h1>
           <p className="text-text-muted text-sm mt-1">
             {mode === 'signin' && 'Sign in to access your dashboard'}
             {mode === 'signup' && 'Start using 41 free diagnostic tools'}
             {mode === 'magic' && "We'll email you a link to sign in"}
             {mode === 'forgot' && "We'll email you a link to reset your password"}
+            {mode === 'reset' && 'Enter your new password below'}
           </p>
         </div>
 
@@ -132,22 +163,26 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleEmailAuth} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="mc-input"
-              required
-            />
-          </div>
+          {mode !== 'reset' && (
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="mc-input"
+                required
+              />
+            </div>
+          )}
 
-          {(mode === 'signin' || mode === 'signup') && (
+          {(mode === 'signin' || mode === 'signup' || mode === 'reset') && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium">Password</label>
+                <label className="block text-sm font-medium">
+                  {mode === 'reset' ? 'New Password' : 'Password'}
+                </label>
                 {mode === 'signin' && (
                   <button
                     type="button"
@@ -163,7 +198,7 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={mode === 'reset' ? 'Enter new password' : '••••••••'}
                   className="mc-input pr-12"
                   required
                   minLength={6}
@@ -201,6 +236,7 @@ export default function LoginPage() {
             {!loading && mode === 'signup' && 'Create Account'}
             {!loading && mode === 'magic' && 'Send Magic Link'}
             {!loading && mode === 'forgot' && 'Send Reset Link'}
+            {!loading && mode === 'reset' && 'Update Password'}
           </button>
         </form>
 
@@ -233,6 +269,11 @@ export default function LoginPage() {
               <button onClick={() => switchMode('signin')} className="text-harley hover:underline">
                 Back to sign in
               </button>
+            </p>
+          )}
+          {mode === 'reset' && (
+            <p className="text-text-dim text-xs">
+              Enter your new password and click Update Password.
             </p>
           )}
         </div>
