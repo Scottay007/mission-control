@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { createBrowserSupabaseClient } from '@/lib/supabase';
 
 export default function LoginPage() {
-  const [mode, setMode] = useState('signin'); // signin, signup, magic
+  const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,10 +21,16 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      if (mode === 'magic') {
+      if (mode === 'forgot') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + '/account',
+        });
+        if (resetError) throw resetError;
+        setSuccess('Check your email for a password reset link!');
+      } else if (mode === 'magic') {
         const { error: magicError } = await supabase.auth.signInWithOtp({
           email,
-          options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+          options: { emailRedirectTo: window.location.origin + '/dashboard' },
         });
         if (magicError) throw magicError;
         setSuccess('Check your email for a magic link!');
@@ -32,7 +38,7 @@ export default function LoginPage() {
         const { error: signupError } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${window.location.origin}/onboarding` },
+          options: { emailRedirectTo: window.location.origin + '/onboarding' },
         });
         if (signupError) throw signupError;
         setSuccess('Check your email to confirm your account!');
@@ -55,37 +61,43 @@ export default function LoginPage() {
     try {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo: `${window.location.origin}/dashboard` },
+        options: { redirectTo: window.location.origin + '/dashboard' },
       });
       if (oauthError) throw oauthError;
     } catch (err) {
-      setError(err.message || `Failed to sign in with ${provider}.`);
+      setError(err.message || 'Failed to sign in with ' + provider + '.');
     }
+  };
+
+  const switchMode = (newMode) => {
+    setMode(newMode);
+    setError('');
+    setSuccess('');
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <a href="/" className="inline-flex items-center gap-2 mb-4">
             <span className="text-3xl">🔧</span>
             <span className="font-mono font-bold text-xl">MISSION CONTROL</span>
           </a>
           <h1 className="text-2xl font-bold">
-            {mode === 'signin' ? 'Welcome back' : mode === 'signup' ? 'Create your account' : 'Magic link sign in'}
+            {mode === 'signin' && 'Welcome back'}
+            {mode === 'signup' && 'Create your account'}
+            {mode === 'magic' && 'Magic link sign in'}
+            {mode === 'forgot' && 'Reset your password'}
           </h1>
           <p className="text-text-muted text-sm mt-1">
-            {mode === 'signin'
-              ? 'Sign in to access your dashboard'
-              : mode === 'signup'
-              ? 'Start using 41 free diagnostic tools'
-              : 'We\'ll email you a link to sign in'}
+            {mode === 'signin' && 'Sign in to access your dashboard'}
+            {mode === 'signup' && 'Start using 41 free diagnostic tools'}
+            {mode === 'magic' && "We'll email you a link to sign in"}
+            {mode === 'forgot' && "We'll email you a link to reset your password"}
           </p>
         </div>
 
-        {/* OAuth buttons */}
-        {mode !== 'magic' && (
+        {(mode === 'signin' || mode === 'signup') && (
           <div className="space-y-3 mb-6">
             <button
               onClick={() => handleOAuth('google')}
@@ -111,7 +123,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {mode !== 'magic' && (
+        {(mode === 'signin' || mode === 'signup') && (
           <div className="flex items-center gap-3 mb-6">
             <div className="flex-1 h-px bg-border" />
             <span className="text-text-dim text-xs">OR</span>
@@ -119,7 +131,6 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Email form */}
         <form onSubmit={handleEmailAuth} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1.5">Email</label>
@@ -133,9 +144,20 @@ export default function LoginPage() {
             />
           </div>
 
-          {mode !== 'magic' && (
+          {(mode === 'signin' || mode === 'signup') && (
             <div>
-              <label className="block text-sm font-medium mb-1.5">Password</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium">Password</label>
+                {mode === 'signin' && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode('forgot')}
+                    className="text-xs text-harley hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -174,42 +196,41 @@ export default function LoginPage() {
             disabled={loading}
             className="mc-btn-primary w-full py-2.5"
           >
-            {loading
-              ? 'Loading...'
-              : mode === 'signin'
-              ? 'Sign In'
-              : mode === 'signup'
-              ? 'Create Account'
-              : 'Send Magic Link'}
+            {loading && 'Loading...'}
+            {!loading && mode === 'signin' && 'Sign In'}
+            {!loading && mode === 'signup' && 'Create Account'}
+            {!loading && mode === 'magic' && 'Send Magic Link'}
+            {!loading && mode === 'forgot' && 'Send Reset Link'}
           </button>
         </form>
 
-        {/* Mode toggles */}
         <div className="mt-6 text-center text-sm text-text-muted space-y-2">
-          {mode === 'signin' ? (
+          {mode === 'signin' && (
             <>
               <p>
-                Don&apos;t have an account?{' '}
-                <button onClick={() => { setMode('signup'); setError(''); setSuccess(''); }} className="text-harley hover:underline">
+                {"Don't have an account? "}
+                <button onClick={() => switchMode('signup')} className="text-harley hover:underline">
                   Sign up
                 </button>
               </p>
               <p>
-                <button onClick={() => { setMode('magic'); setError(''); setSuccess(''); }} className="text-text-dim hover:text-text-primary">
+                <button onClick={() => switchMode('magic')} className="text-text-dim hover:text-text-primary">
                   Use magic link instead
                 </button>
               </p>
             </>
-          ) : mode === 'signup' ? (
+          )}
+          {mode === 'signup' && (
             <p>
-              Already have an account?{' '}
-              <button onClick={() => { setMode('signin'); setError(''); setSuccess(''); }} className="text-harley hover:underline">
+              {"Already have an account? "}
+              <button onClick={() => switchMode('signin')} className="text-harley hover:underline">
                 Sign in
               </button>
             </p>
-          ) : (
+          )}
+          {(mode === 'magic' || mode === 'forgot') && (
             <p>
-              <button onClick={() => { setMode('signin'); setError(''); setSuccess(''); }} className="text-harley hover:underline">
+              <button onClick={() => switchMode('signin')} className="text-harley hover:underline">
                 Back to sign in
               </button>
             </p>
