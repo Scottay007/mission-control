@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TIERS } from '@/lib/constants';
+import { createBrowserSupabaseClient } from '@/lib/supabase';
 
 const COMPARISON = [
   { feature: 'All 41 diagnostic tools', free: true, premium: true, pro: true },
@@ -51,10 +52,25 @@ export default function PricingPage() {
 
   const handleCheckout = async (tier) => {
     try {
+      // Get the logged-in user
+      const supabase = createBrowserSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        // Not logged in — send them to login, then back to pricing
+        window.location.href = '/login?redirect=/pricing';
+        return;
+      }
+
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier, interval: annual ? 'annual' : 'monthly' }),
+        body: JSON.stringify({
+          tier,
+          interval: annual ? 'annual' : 'monthly',
+          userId: session.user.id,
+          email: session.user.email,
+        }),
       });
       const data = await res.json();
       if (data.url) {
